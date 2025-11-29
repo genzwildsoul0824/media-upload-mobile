@@ -81,8 +81,6 @@ class ApiService {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        // Increased timeout for chunk uploads (30 seconds)
-        timeout: 30000,
       });
 
       // Clean up temp file
