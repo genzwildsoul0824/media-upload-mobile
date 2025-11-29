@@ -16,24 +16,40 @@ export class PermissionService {
       });
 
       if (!permission) {
+        console.error('Camera permission not available for platform:', Platform.OS);
+        Alert.alert('Error', 'Camera permission is not available on this device.');
         return false;
       }
 
+      console.log('Checking camera permission:', permission);
       const result = await check(permission);
+      console.log('Camera permission check result:', result);
 
       if (result === RESULTS.GRANTED) {
+        console.log('Camera permission already granted');
         return true;
       }
 
-      if (result === RESULTS.DENIED) {
+      if (result === RESULTS.DENIED || result === RESULTS.UNAVAILABLE) {
+        console.log('Requesting camera permission...');
         const requestResult = await request(permission);
-        return requestResult === RESULTS.GRANTED;
+        console.log('Camera permission request result:', requestResult);
+
+        if (requestResult === RESULTS.GRANTED) {
+          return true;
+        } else {
+          Alert.alert(
+            'Permission Denied',
+            'Camera permission is required to take photos and videos. Please grant permission when prompted.',
+          );
+          return false;
+        }
       }
 
       if (result === RESULTS.BLOCKED) {
         Alert.alert(
           'Camera Permission Required',
-          'Please enable camera access in your device settings to take photos and videos.',
+          'Camera access has been blocked. Please enable camera access in your device settings to take photos and videos.',
           [
             {text: 'Cancel', style: 'cancel'},
             {text: 'Open Settings', onPress: () => openSettings()},
@@ -42,9 +58,11 @@ export class PermissionService {
         return false;
       }
 
+      console.warn('Unexpected camera permission result:', result);
       return false;
     } catch (error) {
       console.error('Camera permission error:', error);
+      Alert.alert('Error', `Failed to request camera permission: ${error}`);
       return false;
     }
   }
@@ -54,7 +72,7 @@ export class PermissionService {
       const permission = Platform.select({
         ios: PERMISSIONS.IOS.PHOTO_LIBRARY,
         android:
-          Platform.Version >= 33
+          Number(Platform.Version) >= 33
             ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
             : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
       });

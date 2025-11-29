@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import {useUploadStore} from '../store/uploadStore';
-import {uploadService} from '../services/uploadService';
+import {uploadQueueManager} from '../services/uploadQueueManager';
+import {formatFileSize, formatDuration} from '../utils/fileUtils';
 import {Colors} from '../styles/colors';
 import type {FileMetadata} from '../types';
 
@@ -22,74 +24,39 @@ export function FileItem({file}: Props) {
 
   useEffect(() => {
     if (file.status === 'uploading') {
+      // Calculate initial elapsed time immediately
+      const pausedDuration = file.pausedDuration || 0;
+      setElapsedTime(Date.now() - file.startTime - pausedDuration);
+
+      // Then update every second
       const interval = setInterval(() => {
-        setElapsedTime(Date.now() - file.startTime);
+        const pausedDuration = file.pausedDuration || 0;
+        setElapsedTime(Date.now() - file.startTime - pausedDuration);
       }, 1000);
       return () => clearInterval(interval);
+    } else if (file.status === 'paused' && file.endTime) {
+      // Show paused duration when paused
+      const pausedDuration = file.pausedDuration || 0;
+      setElapsedTime(file.endTime - file.startTime - pausedDuration);
+    } else {
+      // Reset elapsed time when not uploading or paused
+      setElapsedTime(0);
     }
-  }, [file.status, file.startTime]);
+  }, [file.status, file.startTime, file.pausedDuration, file.endTime]);
 
-  const formatDuration = (ms: number): string => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    }
-    return `${seconds}s`;
-  };
-
-  const formatSize = (bytes: number): string => {
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(2)} MB`;
-  };
-
-  const handleStart = async () => {
-    updateFile(file.id, {status: 'uploading', error: undefined});
-
-    await uploadService.uploadFile(
-      file,
-      (progress, uploadedChunks) => {
-        updateFile(file.id, {progress, uploadedChunks});
-      },
-      error => {
-        updateFile(file.id, {
-          status: 'error',
-          error,
-          endTime: Date.now(),
-        });
-        addToHistory({
-          id: file.id,
-          filename: file.filename,
-          size: file.size,
-          mimeType: file.mimeType,
-          status: 'failed',
-          timestamp: Date.now(),
-          duration: Date.now() - file.startTime,
-        });
-      },
-      () => {
-        const endTime = Date.now();
-        updateFile(file.id, {
-          status: 'completed',
-          progress: 100,
-          endTime,
-        });
-        addToHistory({
-          id: file.id,
-          filename: file.filename,
-          size: file.size,
-          mimeType: file.mimeType,
-          status: 'completed',
-          timestamp: endTime,
-          duration: endTime - file.startTime,
-        });
-      },
-    );
+  const handleStart = () => {
+    // Resume upload through queue manager
+    uploadQueueManager.resumeUpload(file);
   };
 
   const handlePause = () => {
-    uploadService.pauseUpload(file.id);
-    updateFile(file.id, {status: 'paused'});
+    uploadQueueManager.pauseUpload(file.id);
+    // Status will be updated by queue manager after pause completes
+  };
+
+  const handleResume = () => {
+    // Resume upload through queue manager
+    uploadQueueManager.resumeUpload(file);
   };
 
   const handleCancel = () => {
@@ -99,7 +66,7 @@ export function FileItem({file}: Props) {
         text: 'Yes',
         style: 'destructive',
         onPress: () => {
-          uploadService.cancelUpload(file.id, file.uploadId);
+          uploadQueueManager.cancelUpload(file.id, file.uploadId);
           removeFile(file.id);
         },
       },
@@ -113,8 +80,30 @@ export function FileItem({file}: Props) {
       uploadedChunks: [],
       error: undefined,
       startTime: Date.now(),
+      pausedDuration: 0,
+      pausedAt: undefined,
+      endTime: undefined,
     });
-    handleStart();
+    // Add to queue for retry
+    uploadQueueManager.resumeUpload(file);
+  };
+
+  const getStatusIcon = () => {
+    switch (file.status) {
+      case 'completed':
+        return <Text style={styles.statusIcon}>✓</Text>;
+      case 'error':
+        return <Text style={styles.statusIconError}>✗</Text>;
+      case 'uploading':
+      case 'finalizing':
+        return <ActivityIndicator size="small" color={Colors.primary} />;
+      default:
+        return (
+          <Text style={styles.previewIcon}>
+            {file.mimeType.startsWith('image/') ? '🖼️' : '🎬'}
+          </Text>
+        );
+    }
   };
 
   return (
@@ -123,42 +112,67 @@ export function FileItem({file}: Props) {
         {file.mimeType.startsWith('image/') && file.uri ? (
           <Image source={{uri: file.uri}} style={styles.previewImage} />
         ) : (
-          <Text style={styles.previewIcon}>
-            {file.mimeType.startsWith('video/') ? '🎬' : '📄'}
-          </Text>
+          getStatusIcon()
         )}
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.filename} numberOfLines={1}>
-          {file.filename}
-        </Text>
-        <Text style={styles.meta}>
-          {formatSize(file.size)}
-          {file.status === 'uploading' && ` • ${formatDuration(elapsedTime)}`}
-          {file.endTime &&
-            ` • ${formatDuration(file.endTime - file.startTime)}`}
-        </Text>
+        <View style={styles.info}>
+          <Text style={styles.filename} numberOfLines={1}>
+            {file.filename}
+          </Text>
+          <Text style={styles.size}>{formatFileSize(file.size)}</Text>
+          {file.status === 'uploading' && (
+            <Text style={styles.time}>{formatDuration(elapsedTime)}</Text>
+          )}
+          {file.status === 'finalizing' && (
+            <Text style={[styles.time, styles.finalizingText]}>
+              Finalizing...
+            </Text>
+          )}
+          {(file.status === 'paused' ||
+            file.status === 'completed' ||
+            file.status === 'error') &&
+            file.endTime && (
+              <Text style={styles.time}>
+                {formatDuration(
+                  Math.max(
+                    0,
+                    file.endTime - file.startTime - (file.pausedDuration || 0),
+                  ),
+                )}
+              </Text>
+            )}
+        </View>
 
-        {file.status !== 'completed' && file.status !== 'error' && (
+        {file.status !== 'completed' && (
           <View style={styles.progressBar}>
             <View
               style={[styles.progressFill, {width: `${file.progress}%`}]}
             />
             <Text style={styles.progressText}>
-              {Math.round(file.progress)}%
+              {file.status === 'finalizing' ? (
+                <Text style={styles.finalizingProgressText}>
+                  Finalizing...
+                </Text>
+              ) : (
+                `${Math.round(file.progress)}%`
+              )}
             </Text>
           </View>
         )}
 
         {file.error && (
-          <Text style={styles.error} numberOfLines={2}>
-            {file.error}
-          </Text>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorIcon}>⚠️</Text>
+            <Text style={styles.error} numberOfLines={2}>
+              {file.error}
+            </Text>
+          </View>
         )}
 
         {file.status === 'completed' && (
-          <Text style={styles.success}>✓ Upload completed</Text>
+          <Text style={styles.success}>Upload completed successfully!</Text>
         )}
       </View>
 
@@ -176,7 +190,9 @@ export function FileItem({file}: Props) {
         )}
 
         {file.status === 'paused' && (
-          <TouchableOpacity style={styles.actionButton} onPress={handleStart}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleResume}>
             <Text style={styles.actionIcon}>▶️</Text>
           </TouchableOpacity>
         )}
@@ -229,9 +245,22 @@ const styles = StyleSheet.create({
   previewIcon: {
     fontSize: 32,
   },
+  statusIcon: {
+    fontSize: 24,
+    color: Colors.success,
+    fontWeight: 'bold',
+  },
+  statusIconError: {
+    fontSize: 24,
+    color: Colors.error,
+    fontWeight: 'bold',
+  },
   content: {
     flex: 1,
     justifyContent: 'center',
+  },
+  info: {
+    marginBottom: 8,
   },
   filename: {
     fontSize: 16,
@@ -239,10 +268,18 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 4,
   },
-  meta: {
+  size: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  time: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  finalizingText: {
+    color: Colors.primary,
+    fontWeight: '500',
   },
   progressBar: {
     height: 6,
@@ -263,15 +300,29 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: '600',
   },
+  finalizingProgressText: {
+    fontWeight: 'bold',
+    color: Colors.primary,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  errorIcon: {
+    fontSize: 16,
+    marginRight: 4,
+  },
   error: {
     fontSize: 12,
     color: Colors.error,
-    marginTop: 4,
+    flex: 1,
   },
   success: {
     fontSize: 12,
     color: Colors.success,
     fontWeight: '600',
+    marginTop: 4,
   },
   actions: {
     flexDirection: 'column',

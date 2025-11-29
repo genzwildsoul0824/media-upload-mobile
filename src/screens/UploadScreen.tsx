@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
 } from 'react-native';
 import {
@@ -16,8 +15,9 @@ import DocumentPicker, {
   DocumentPickerResponse,
 } from 'react-native-document-picker';
 import {permissionService} from '../services/permissionService';
-import {FileItem} from '../components/FileItem';
+import {FileList} from '../components/FileList';
 import {useUploadStore} from '../store/uploadStore';
+import {uploadQueueManager} from '../services/uploadQueueManager';
 import {Colors} from '../styles/colors';
 import type {FileMetadata} from '../types';
 
@@ -25,29 +25,57 @@ const CHUNK_SIZE = 1024 * 1024;
 const MAX_FILES = 10;
 
 export function UploadScreen() {
-  const {files, addFiles} = useUploadStore();
+  const {files, addFiles, updateFile, addToHistory} = useUploadStore();
   const [loading, setLoading] = useState(false);
 
+  // Initialize queue manager callbacks
+  React.useEffect(() => {
+    uploadQueueManager.setCallbacks(updateFile, addToHistory);
+  }, [updateFile, addToHistory]);
+
   const handleCamera = async () => {
-    const hasPermission = await permissionService.requestCameraPermission();
-
-    if (!hasPermission) {
-      return;
-    }
-
     setLoading(true);
     try {
+      const hasPermission = await permissionService.requestCameraPermission();
+
+      if (!hasPermission) {
+        console.log('Camera permission denied, cannot open camera');
+        Alert.alert(
+          'Permission Required',
+          'Camera permission is required to take photos and videos.',
+        );
+        return;
+      }
+
+      console.log('Opening camera...');
       const result = await launchCamera({
         mediaType: 'mixed',
         quality: 1,
         saveToPhotos: true,
+        includeBase64: false,
       });
+
+      console.log('Camera result:', result);
+
+      if (result.didCancel) {
+        console.log('User cancelled camera');
+        return;
+      }
+
+      if (result.errorCode) {
+        console.error('Camera error:', result.errorCode, result.errorMessage);
+        Alert.alert('Camera Error', result.errorMessage || 'Failed to open camera');
+        return;
+      }
 
       if (result.assets && result.assets.length > 0) {
         processAssets(result.assets);
+      } else {
+        console.log('No assets returned from camera');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to open camera');
+    } catch (error: any) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', `Failed to open camera: ${error?.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -125,6 +153,7 @@ export function UploadScreen() {
 
     if (newFiles.length > 0) {
       addFiles(newFiles);
+      uploadQueueManager.addToQueue(newFiles);
       Alert.alert('Success', `${newFiles.length} file(s) added to queue`);
     }
   };
@@ -157,6 +186,7 @@ export function UploadScreen() {
 
     if (newFiles.length > 0) {
       addFiles(newFiles);
+      uploadQueueManager.addToQueue(newFiles);
       Alert.alert('Success', `${newFiles.length} file(s) added to queue`);
     }
   };
@@ -190,18 +220,17 @@ export function UploadScreen() {
         {files.length}/{MAX_FILES} files • Max 500MB each
       </Text>
 
-      <ScrollView style={styles.fileList}>
-        {files.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No files selected</Text>
-            <Text style={styles.emptySubtext}>
-              Use the buttons above to add files
-            </Text>
-          </View>
-        ) : (
-          files.map(file => <FileItem key={file.id} file={file} />)
-        )}
-      </ScrollView>
+      {files.length > 0 ? (
+        <FileList />
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>📤</Text>
+          <Text style={styles.emptyText}>No files selected</Text>
+          <Text style={styles.emptySubtext}>
+            Use the buttons above to add files
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -248,14 +277,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
   },
-  fileList: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
   emptyState: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 64,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
   },
   emptyText: {
     fontSize: 18,

@@ -6,12 +6,14 @@ export interface FileMetadata {
   mimeType: string;
   totalChunks: number;
   uploadedChunks: number[];
-  status: 'pending' | 'uploading' | 'paused' | 'completed' | 'error' | 'cancelled';
+  status: 'pending' | 'uploading' | 'paused' | 'finalizing' | 'completed' | 'error' | 'cancelled';
   progress: number;
   uploadId?: string;
   error?: string;
   startTime: number;
   endTime?: number;
+  pausedAt?: number; // Timestamp when file was paused
+  pausedDuration?: number; // Total cumulative paused time in milliseconds
 }
 
 export interface UploadHistoryItem {
@@ -24,6 +26,26 @@ export interface UploadHistoryItem {
   duration: number;
 }
 
+export interface ChunkUploadResult {
+  success: boolean;
+  chunkIndex: number;
+  progress: number;
+  error?: string;
+}
+
+export interface UploadStatusResponse {
+  upload_id: string;
+  filename: string;
+  file_size: number;
+  mime_type: string;
+  total_chunks: number;
+  uploaded_chunks: number;
+  missing_chunks: number[];
+  progress: number;
+  status: string;
+  created_at: number;
+}
+
 export interface MonitoringStats {
   storage: {
     total_size: number;
@@ -31,6 +53,12 @@ export interface MonitoringStats {
     file_count: number;
   };
   active_uploads: number;
+  upload_details?: Array<{
+    upload_id: string;
+    filename: string;
+    progress: number;
+    status: string;
+  }>;
   metrics: {
     total_uploads: number;
     successful_uploads: number;

@@ -7,34 +7,17 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import {useUploadStore} from '../store/uploadStore';
+import {formatFileSize, formatDuration} from '../utils/fileUtils';
 import {Colors} from '../styles/colors';
 
 export function HistoryScreen() {
   const {history, clearHistory} = useUploadStore();
 
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) {
-      return '0 B';
-    }
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
-
-  const formatDuration = (ms: number): string => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    }
-    return `${seconds}s`;
-  };
 
   if (history.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📋</Text>
+        <Text style={styles.emptyIcon}>📅</Text>
         <Text style={styles.emptyTitle}>No Upload History</Text>
         <Text style={styles.emptyText}>
           Your completed uploads will appear here
@@ -65,12 +48,19 @@ export function HistoryScreen() {
               <Text style={styles.itemFilename} numberOfLines={1}>
                 {item.filename}
               </Text>
-              <Text style={styles.itemMeta}>
-                {formatSize(item.size)} • {formatDuration(item.duration)}
-              </Text>
-              <Text style={styles.itemDate}>
-                {new Date(item.timestamp).toLocaleString()}
-              </Text>
+              <View style={styles.itemMeta}>
+                <Text style={styles.itemMetaText}>
+                  {formatFileSize(item.size)}
+                </Text>
+                <Text style={styles.itemMetaText}>•</Text>
+                <Text style={styles.itemMetaText}>
+                  {formatDuration(item.duration)}
+                </Text>
+                <Text style={styles.itemMetaText}>•</Text>
+                <Text style={styles.itemMetaText}>
+                  {new Date(item.timestamp).toLocaleString()}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.itemStatus}>
@@ -181,9 +171,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   itemMeta: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 2,
+  },
+  itemMetaText: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: 2,
   },
   itemDate: {
     fontSize: 11,
