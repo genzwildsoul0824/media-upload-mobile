@@ -3366,6 +3366,11 @@ event-target-shim@^5.0.0, event-target-shim@^5.0.1:
   resolved "https://registry.yarnpkg.com/event-target-shim/-/event-target-shim-5.0.1.tgz#5d4d3ebdf9583d63a5333ce2deb7480ab2b05789"
   integrity sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==
 
+eventemitter3@^4.0.7:
+  version "4.0.7"
+  resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
+  integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
+
 execa@^5.0.0, execa@^5.1.1:
   version "5.1.1"
   resolved "https://registry.yarnpkg.com/execa/-/execa-5.1.1.tgz#f80ad9cbf4298f7bd1d4c9555c21e93741c411dd"
@@ -5638,10 +5643,12 @@ react-is@^17.0.1:
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-17.0.2.tgz#e691d4a8e9c789365655539ab372762b0efb54f0"
   integrity sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==
 
-react-native-background-upload@^6.6.0:
-  version "6.6.0"
-  resolved "https://registry.yarnpkg.com/react-native-background-upload/-/react-native-background-upload-6.6.0.tgz#7c081f4260d16e7a416522c3622b81938ad799c8"
-  integrity sha512-adfOJmeO3GmPmc53cdHYWp5eTGKagk/AhkraSoQ89BHRwBWrtRQ29NN9sm2CLezBYrSQWg0W47C8TaowtYZ1LQ==
+react-native-background-actions@^2.6.1:
+  version "2.6.9"
+  resolved "https://registry.yarnpkg.com/react-native-background-actions/-/react-native-background-actions-2.6.9.tgz#2e4b9e293a4be99287eb4388e58c6507cefefb64"
+  integrity sha512-KCkWESJ46IZcg7jKDuiQftbUX6ULqJHhrMcV3Eix0Nk5WwFUUKiVoFKCD6bDfkbX6c5SWFN27F17LYghdm6JjA==
+  dependencies:
+    eventemitter3 "^4.0.7"
 
 react-native-document-picker@^9.1.1:
   version "9.3.1"
